@@ -39,6 +39,21 @@ def reset_and_setup():
         conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, password=DB_PASS, host=DB_HOST)
         cursor = conn.cursor()
         
+        # --- [BARU] Tabel KELAS ---
+        # Kita buat ini dulu agar bisa diisi data awal
+        cursor.execute("""
+            CREATE TABLE kelas (
+                id SERIAL PRIMARY KEY,
+                nama_kelas VARCHAR(50) UNIQUE NOT NULL
+            );
+        """)
+
+        # --- [BARU] Isi Data Awal Kelas (Seeding) ---
+        # Agar dropdown tidak kosong saat pertama kali aplikasi dibuka
+        data_kelas = [('10 RPL',), ('11 RPL',), ('12 RPL',), ('10 TKJ',), ('11 TKJ',), ('12 TKJ',)]
+        cursor.executemany("INSERT INTO kelas (nama_kelas) VALUES (%s)", data_kelas)
+        print("📚 Data awal kelas berhasil ditambahkan.")
+
         # Tabel SISWA
         cursor.execute("""
             CREATE TABLE siswa (
@@ -77,7 +92,7 @@ def reset_and_setup():
         
         conn.commit()
         conn.close()
-        print("✅ SETUP SELESAI: Tabel Siswa, Absensi, & History siap!")
+        print("✅ SETUP SELESAI: Tabel Siswa, Absensi, History, & Kelas siap!")
         
     except Exception as e:
         print(f"❌ ERROR FATAL: {e}")
