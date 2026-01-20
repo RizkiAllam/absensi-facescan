@@ -3,71 +3,45 @@ import os
 from dotenv import load_dotenv
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
-# 1. Inisialisasi Environment Variables dari file .env
 load_dotenv()
 
+# Konfigurasi
 DB_HOST = os.getenv("DB_HOST")
-DB_NAME = os.getenv("DB_NAME")
 DB_USER = os.getenv("DB_USER")
-DB_PASS = os.getenv("DB_PASS") 
-DB_PORT = os.getenv("DB_PORT")
-TARGET_DB = DB_NAME 
+DB_PASS = os.getenv("DB_PASS")
+DB_NAME = os.getenv("DB_NAME")
 
-def create_database():
-    """
-    Menghubungkan ke system database 'postgres' untuk membuat database project
-    """
-    conn = None
+def reset_and_setup():
+    print(f"🔥 MEMULAI RESET TOTAL DATABASE: {DB_NAME}...")
     try:
-        print(f"🔌 Menghubungkan ke System Database @{DB_HOST}...")
-        conn = psycopg2.connect(
-            dbname="postgres", 
-            user=DB_USER, 
-            password=DB_PASS, 
-            host=DB_HOST, 
-            port=DB_PORT
-        )
-        # Operasi CREATE DATABASE memerlukan autocommit aktif
+        # 1. KONEKSI KE SYSTEM POSTGRES (Untuk hapus/buat DB)
+        conn = psycopg2.connect(dbname="postgres", user=DB_USER, password=DB_PASS, host=DB_HOST)
         conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
         cursor = conn.cursor()
 
-        # Cek apakah database target sudah ada
-        cursor.execute(f"SELECT 1 FROM pg_database WHERE datname = '{TARGET_DB}';")
-        exists = cursor.fetchone()
-
-        if not exists:
-            print(f"🔨 Database '{TARGET_DB}' belum ada. Membuat baru...")
-            cursor.execute(f"CREATE DATABASE {TARGET_DB};")
-            print(f"✅ Database '{TARGET_DB}' BERHASIL DIBUAT!")
-        else:
-            print(f"ℹ️ Database '{TARGET_DB}' sudah ada. Lanjut ke setup tabel...")
-
+        # 2. PUTUSKAN KONEKSI LAMA
+        cursor.execute(f"""
+            SELECT pg_terminate_backend(pg_stat_activity.pid)
+            FROM pg_stat_activity
+            WHERE pg_stat_activity.datname = '{DB_NAME}' AND pid <> pg_backend_pid();
+        """)
+        
+        # 3. HAPUS & BUAT DB BARU
+        cursor.execute(f"DROP DATABASE IF EXISTS {DB_NAME};")
+        print("🗑️  Database lama dihapus.")
+        cursor.execute(f"CREATE DATABASE {DB_NAME};")
+        print("🏗️  Database baru dibuat.")
+        
         cursor.close()
-    except Exception as e:
-        print(f"❌ Gagal membuat database: {e}")
-    finally:
-        if conn:
-            conn.close()
-
-def create_tables():
-    """
-    Membangun struktur tabel lengkap di dalam database target
-    """
-    conn = None
-    try:
-        print(f"🔌 Menghubungkan ke '{TARGET_DB}' untuk setup tabel...")
-        conn = psycopg2.connect(
-            dbname=TARGET_DB, 
-            user=DB_USER, 
-            password=DB_PASS, 
-            host=DB_HOST, 
-            port=DB_PORT
-        )
+        conn.close()
+        
+        # 4. BUAT TABEL (Koneksi ke DB Baru)
+        conn = psycopg2.connect(dbname=DB_NAME, user=DB_USER, password=DB_PASS, host=DB_HOST)
         cursor = conn.cursor()
-
-        # 1. Tabel SISWA (Penyimpanan data profil dan encoding wajah)
+        
+        # Tabel SISWA
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS siswa (
+            CREATE TABLE siswa (
                 id SERIAL PRIMARY KEY,
                 nama VARCHAR(100) NOT NULL,
                 nis VARCHAR(50) UNIQUE NOT NULL,
@@ -75,23 +49,21 @@ def create_tables():
                 face_encoding FLOAT8[]
             );
         """)
-        print("✅ Tabel 'siswa' Siap.")
-
-        # 2. Tabel ABSENSI (Data kehadiran harian/real-time)
+        
+        # Tabel ABSENSI
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS absensi (
+            CREATE TABLE absensi (
                 id SERIAL PRIMARY KEY,
                 siswa_id INTEGER REFERENCES siswa(id) ON DELETE CASCADE,
-                mata_pelajaran VARCHAR(100),
+                mata_pelajaran VARCHAR(100) DEFAULT 'Umum',
                 waktu_scan TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 status_kehadiran VARCHAR(50)
             );
         """)
-        print("✅ Tabel 'absensi' Siap.")
-
-        # 3. Tabel ATTENDANCE_HISTORY (Penyimpanan permanen untuk fitur REKAP)
+        
+        # Tabel HISTORY
         cursor.execute("""
-            CREATE TABLE IF NOT EXISTS attendance_history (
+            CREATE TABLE attendance_history (
                 id SERIAL PRIMARY KEY,
                 siswa_id INTEGER REFERENCES siswa(id),
                 kelas VARCHAR(50),
@@ -102,18 +74,14 @@ def create_tables():
                 UNIQUE(siswa_id, mata_pelajaran, tanggal)
             );
         """)
-        print("✅ Tabel 'attendance_history' Siap.")
         
         conn.commit()
-        cursor.close()
-        print("🎉 SETUP DATABASE SELESAI SEMPURNA!")
-
+        conn.close()
+        print("✅ SETUP SELESAI: Tabel Siswa, Absensi, & History siap!")
+        
     except Exception as e:
-        print(f"❌ Gagal membuat tabel: {e}")
-    finally:
-        if conn:
-            conn.close()
+        print(f"❌ ERROR FATAL: {e}")
+        print("💡 Cek password di .env!")
 
 if __name__ == "__main__":
-    create_database() 
-    create_tables()
+    reset_and_setup()

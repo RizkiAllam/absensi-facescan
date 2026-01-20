@@ -1,133 +1,107 @@
-'use client';
+"use client";
+import { useState } from "react";
+import axios from "axios";
 
-import { useState } from 'react';
-import axios from 'axios';
-import * as XLSX from 'xlsx';
-
-const API_URL = 'http://127.0.0.1:8000';
-
-// 1. Definisikan Interface agar tidak pakai 'any'
-interface RekapData {
-  tanggal: string;
-  nis: string;
-  nama: string;
-  kelas: string;
-  mapel: string;
-  status: string;
-  waktu: string;
-}
+const API_BASE_URL = "http://127.0.0.1:8000";
 
 export default function RekapPage() {
-  const [data, setData] = useState<RekapData[]>([]); // 2. Gunakan Interface di sini
-  const [loading, setLoading] = useState(false);
-  
-  const [filters, setFilters] = useState({
-    start_date: new Date().toISOString().split('T')[0],
-    end_date: new Date().toISOString().split('T')[0],
-    kelas: '',
-    mata_pelajaran: ''
+  const [dates, setDates] = useState({
+    start: new Date().toISOString().split("T")[0],
+    end: new Date().toISOString().split("T")[0],
   });
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  const handleFetchRekap = async () => {
+  const handleCari = async () => {
     setLoading(true);
     try {
-      const res = await axios.post(`${API_URL}/rekap-absensi`, filters);
+      const formData = new FormData();
+      formData.append("start", dates.start);
+      formData.append("end", dates.end);
+
+      const res = await axios.post(`${API_BASE_URL}/rekap-absensi`, formData);
       setData(res.data.data);
-    } catch (error) {
-      console.error("Gagal ambil rekap:", error);
-      alert("Terjadi kesalahan saat mengambil data.");
+    } catch (err) {
+      console.error(err);
+      alert("Gagal mengambil data rekap.");
     } finally {
       setLoading(false);
     }
   };
 
-  const downloadExcel = () => {
-    const worksheet = XLSX.utils.json_to_sheet(data);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Rekap Keseluruhan");
-    XLSX.writeFile(workbook, `Rekap_Absensi_${filters.start_date}_sd_${filters.end_date}.xlsx`);
-  };
-
   return (
-    <div className="min-h-screen bg-slate-100 p-8 text-slate-900">
-      <div className="max-w-6xl mx-auto">
-        <h1 className="text-3xl font-black mb-6">🗓️ Rekap Histori Database</h1>
-
-        {/* PANEL FILTER */}
-        <div className="bg-white p-6 rounded-2xl shadow-md mb-6 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-          <div>
-            <label className="block text-xs font-bold mb-1 text-slate-500">DARI TANGGAL</label>
-            <input type="date" className="w-full p-2 border rounded outline-blue-500" 
-              value={filters.start_date} onChange={(e) => setFilters({...filters, start_date: e.target.value})} />
-          </div>
-          <div>
-            <label className="block text-xs font-bold mb-1 text-slate-500">SAMPAI TANGGAL</label>
-            <input type="date" className="w-full p-2 border rounded outline-blue-500" 
-              value={filters.end_date} onChange={(e) => setFilters({...filters, end_date: e.target.value})} />
-          </div>
-          <div>
-            <label className="block text-xs font-bold mb-1 text-slate-500">KELAS (OPSIONAL)</label>
-            <input type="text" placeholder="Semua" className="w-full p-2 border rounded outline-blue-500" 
-              value={filters.kelas} onChange={(e) => setFilters({...filters, kelas: e.target.value})} />
-          </div>
+    <div className="space-y-6 animate-fade-in min-h-screen">
+      <div className="flex flex-col md:flex-row justify-between items-end md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-white">🗓️ Rekap Absensi</h1>
+          <p className="text-slate-400 text-sm">Laporan kehadiran siswa per periode</p>
+        </div>
+        
+        {/* FILTER TANGGAL */}
+        <div className="flex gap-2 bg-slate-800 p-2 rounded-xl border border-slate-700">
+          <input 
+            type="date" 
+            className="bg-slate-700 text-white p-2 rounded-lg outline-none border border-slate-600 focus:border-blue-500"
+            value={dates.start}
+            onChange={(e) => setDates({...dates, start: e.target.value})}
+          />
+          <span className="text-white self-center">-</span>
+          <input 
+            type="date" 
+            className="bg-slate-700 text-white p-2 rounded-lg outline-none border border-slate-600 focus:border-blue-500"
+            value={dates.end}
+            onChange={(e) => setDates({...dates, end: e.target.value})}
+          />
           <button 
-            onClick={handleFetchRekap} 
+            onClick={handleCari}
             disabled={loading}
-            className="bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700 disabled:bg-slate-400 transition"
+            className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-lg font-bold transition disabled:opacity-50"
           >
-            {loading ? "⏳ MENCARI..." : "🔎 CARI DATA"}
+            {loading ? "..." : "CARI"}
           </button>
         </div>
+      </div>
 
-        {/* TABEL HASIL */}
-        <div className="bg-white rounded-2xl shadow-md overflow-hidden">
-          <div className="p-4 border-b flex justify-between items-center bg-slate-50">
-            <span className="font-bold text-slate-700">Ditemukan: {data.length} Baris Data</span>
-            <button 
-                onClick={downloadExcel} 
-                disabled={data.length === 0 || loading} 
-                className="bg-green-600 text-white px-4 py-1.5 rounded text-sm font-bold disabled:bg-slate-300 transition hover:bg-green-700 shadow-sm"
-            >
-              📥 EXPORT EXCEL
-            </button>
-          </div>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-                <thead className="bg-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-600">
+      {/* TABEL HASIL */}
+      <div className="bg-white rounded-2xl shadow-xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm text-slate-600">
+            <thead className="bg-slate-100 uppercase font-bold text-slate-500 text-xs border-b border-slate-200">
+              <tr>
+                <th className="p-4">Tanggal</th>
+                <th className="p-4">Jam</th>
+                <th className="p-4">Nama Siswa</th>
+                <th className="p-4">Kelas</th>
+                <th className="p-4">Mata Pelajaran</th>
+                <th className="p-4">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {data.length === 0 ? (
                 <tr>
-                    <th className="p-4">Tanggal</th>
-                    <th className="p-4">Nama Siswa</th>
-                    <th className="p-4">Mata Pelajaran</th>
-                    <th className="p-4">Status</th>
+                  <td colSpan={6} className="p-8 text-center text-slate-400 italic">
+                    {loading ? "Sedang memuat data..." : "Tidak ada data pada tanggal yang dipilih."}
+                  </td>
                 </tr>
-                </thead>
-                <tbody className="divide-y text-sm">
-                {loading ? (
-                    <tr><td colSpan={4} className="p-10 text-center text-slate-400 font-bold">Sedang memproses data...</td></tr>
-                ) : data.length === 0 ? (
-                    <tr><td colSpan={4} className="p-10 text-center text-slate-400">Tidak ada data ditemukan untuk filter ini.</td></tr>
-                ) : (
-                    data.map((item, i) => ( // 3. 'item' sekarang otomatis bertipe RekapData
-                    <tr key={i} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-4 font-mono text-slate-500">{item.tanggal}</td>
-                        <td className="p-4 font-bold text-slate-800">{item.nama}</td>
-                        <td className="p-4 text-slate-600">{item.mapel}</td>
-                        <td className="p-4">
-                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black border ${
-                                item.status === 'Hadir' 
-                                ? 'bg-green-100 text-green-700 border-green-200' 
-                                : 'bg-red-100 text-red-700 border-red-200'
-                            }`}>
-                            {item.status.toUpperCase()}
-                            </span>
-                        </td>
-                    </tr>
-                    ))
-                )}
-                </tbody>
-            </table>
-          </div>
+              ) : (
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                data.map((item: any, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50 transition">
+                    <td className="p-4 font-mono">{item.tanggal}</td>
+                    <td className="p-4 font-mono text-blue-600 font-bold">{item.waktu}</td>
+                    <td className="p-4 font-bold text-slate-800">{item.nama}</td>
+                    <td className="p-4">{item.kelas}</td>
+                    <td className="p-4">{item.mapel}</td>
+                    <td className="p-4">
+                      <span className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold border border-green-200">
+                        {item.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
